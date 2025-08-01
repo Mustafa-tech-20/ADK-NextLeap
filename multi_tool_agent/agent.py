@@ -9,14 +9,23 @@ from vertexai import agent_engines
 from vertexai.preview import reasoning_engines
 from google.adk.tools import ToolContext
 from google.adk.tools.google_api_tool import CalendarToolset
+
 from google.adk.agents import Agent
+from google.oauth2.credentials import Credentials
+from typing import Optional
 
 from google.adk.tools import FunctionTool
+
+from myadktoolset4 import SimpleCredentialStore, MyCalendarToolset
+
 load_dotenv()
 
 PROJECT_ID = os.getenv("PROJECT_ID")
 LOCATION = "us-central1"
 STAGING_BUCKET = os.getenv("STAGING_BUCKET")
+
+print("Initializing credential store...")
+cred_store = SimpleCredentialStore()
 
 
 # vertexai.init(
@@ -34,9 +43,12 @@ client_id = os.getenv("OAUTH_CLIENT_ID")
 client_secret = os.getenv("OAUTH_CLIENT_SECRET")
 
 
-calendar_tool = CalendarToolset()
+print("Initializing MyCalendarToolset with credential store...")
+calendar_tool = MyCalendarToolset(credential_store=cred_store)
 
-# Use the specific configure method for this toolset type
+calcal= CalendarToolset()
+
+print("Configuring OAuth credentials for the toolset...")
 calendar_tool.configure_auth(
     client_id=client_id, client_secret=client_secret
 )
