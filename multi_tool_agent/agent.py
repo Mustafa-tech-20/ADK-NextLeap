@@ -1,82 +1,140 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-import requests
-import vertexai
-from typing import Dict, Any
+import json
 import os
+
 from dotenv import load_dotenv
-
-from vertexai import agent_engines
-from vertexai.preview import reasoning_engines
+from fastapi.openapi.models import OAuth2
+from fastapi.openapi.models import OAuthFlowAuthorizationCode
+from fastapi.openapi.models import OAuthFlows
+from google.adk import Agent
+from google.adk.auth import AuthConfig
+from google.adk.auth import AuthCredential
+from google.adk.auth import AuthCredentialTypes
+from google.adk.auth import OAuth2Auth
 from google.adk.tools import ToolContext
-from google.adk.tools.google_api_tool import CalendarToolset
-from google.adk.agents import Agent
+from google.adk.tools.google_api_tool import SheetsToolset , CalendarToolset
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
 
-from google.adk.tools import FunctionTool
+# Load environment variables from .env file
 load_dotenv()
 
-PROJECT_ID = os.getenv("PROJECT_ID")
-LOCATION = "us-central1"
-STAGING_BUCKET = os.getenv("STAGING_BUCKET")
+# Access the variable
+oauth_client_id = os.getenv("OAUTH_CLIENT_ID")
+oauth_client_secret = os.getenv("OAUTH_CLIENT_SECRET")
 
 
-# vertexai.init(
-#     project=PROJECT_ID,
-#     location=LOCATION,
-#     staging_bucket=STAGING_BUCKET,
-# )
+SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 
-
-# Example: Configuring Google Calendar Tools
-
-
-client_id = os.getenv("OAUTH_CLIENT_ID")
-client_secret = os.getenv("OAUTH_CLIENT_SECRET")
-
-
-calendar_tool = CalendarToolset()
-
-# Use the specific configure method for this toolset type
-calendar_tool.configure_auth(
-    client_id=client_id, client_secret=client_secret
+calendar_toolset = CalendarToolset(
+    client_id=oauth_client_id,
+    client_secret=oauth_client_secret,
 )
+
+
+
+
+def read_calendar(
+    calendar_id: str,
+    tool_context: ToolContext,
+) -> str:
+    """Read events from a Google Calendar.
+
+    Args:
+        calendar_id (str): The ID of the calendar.
+
+    Returns:
+        str: A list of events from the calendar.
+    """
+    creds = None
+
+    if "calendar_tool_tokens" in tool_context.state:
+        creds = Credentials.from_authorized_user_info(
+            tool_context.state["calendar_tool_tokens"], SCOPES
+        )
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            auth_scheme = OAuth2(
+                flows=OAuthFlows(
+                    authorizationCode=OAuthFlowAuthorizationCode(
+                        authorizationUrl="https://accounts.google.com/o/oauth2/auth",
+                        tokenUrl="https://oauth2.googleapis.com/token",
+                        scopes={
+                            "https://www.googleapis.com/auth/calendar": (
+                                "See, edit, share, and permanently delete all the calendars you can access using Google Calendar"
+                            )
+                        },
+                    )
+                )
+            )
+            auth_credential = AuthCredential(
+                auth_type=AuthCredentialTypes.OAUTH2,
+                oauth2=OAuth2Auth(
+                    client_id=oauth_client_id, client_secret=oauth_client_secret,
+                    redirect_uri="https://developers.google.com/oauthplayground"
+                ),
+            )
+            auth_response = tool_context.get_auth_response(
+                AuthConfig(
+                    auth_scheme=auth_scheme, raw_auth_credential=auth_credential
+                )
+            )
+            if auth_response:
+                access_token = auth_response.oauth2.access_token
+                refresh_token = auth_response.oauth2.refresh_token
+
+                creds = Credentials(
+                    token=access_token,
+                    refresh_token=refresh_token,
+                    token_uri=auth_scheme.flows.authorizationCode.tokenUrl,
+                    client_id=oauth_client_id,
+                    client_secret=oauth_client_secret,
+                    scopes=list(auth_scheme.flows.authorizationCode.scopes.keys()),
+                )
+            else:
+                tool_context.request_credential(
+                    AuthConfig(
+                        auth_scheme=auth_scheme,
+                        raw_auth_credential=auth_credential,
+                    )
+                )
+                return "Need User Authorization to access their Google Calendar."
+        tool_context.state["calendar_tool_tokens"] = json.loads(creds.to_json())
+
+    # service = build("calendar", "v3", credentials=creds)
+    # events_result = (
+    #     service.events()
+    #     .list(calendarId=calendar_id, maxResults=10, singleEvents=True, orderBy="startTime")
+    #     .execute()
+    # )
+    # events = events_result.get("items", [])
+    # return json.dumps(events, indent=2)
+
 
 
 root_agent = Agent(
-   name="calendar_agent",
-   model="gemini-2.5-flash",
-   description=(
-   "an angent that reads users google calendar"   
-   ),
-   instruction=(
-       "You are an agent that mananges google calendar for the user , always greet the user with the appropriate message based on this context. "
-   ),
-   tools = [calendar_tool]
+    model="gemini-2.0-flash",
+    name="google_calendar_agent",
+    instruction="""
+      You are a helpful Google Calendar assistant.
+      Use the provided tools to read from Google Calendar.
+""",
+    tools=[read_calendar, calendar_toolset],
 )
-
-
-
-
-# remote_app = agent_engines.create(
-#     agent_engine=root_agent,
-#     requirements=[
-#         "google-cloud-aiplatform[adk,agent_engines]",
-#     ]
-# )
-
-
-
-
-# app = reasoning_engines.AdkApp(
-#     agent=root_agent,
-#     enable_tracing=True,
-# )
-
-
-# session = app.create_session(user_id="u_123")
-# print("Session created", session)
-
-
-
-
-
