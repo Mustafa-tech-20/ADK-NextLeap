@@ -24,8 +24,8 @@ PROJECT_ID = os.getenv("PROJECT_ID")
 LOCATION = "us-central1"
 STAGING_BUCKET = os.getenv("STAGING_BUCKET")
 
-print("Initializing credential store...")
-cred_store = SimpleCredentialStore()
+# print("Initializing credential store...")
+# cred_store = SimpleCredentialStore()
 
 
 # vertexai.init(
@@ -44,12 +44,12 @@ client_secret = os.getenv("OAUTH_CLIENT_SECRET")
 
 
 print("Initializing MyCalendarToolset with credential store...")
-calendar_tool = MyCalendarToolset(credential_store=cred_store)
+# calendar_tool = MyCalendarToolset(credential_store=cred_store)
 
 calcal= CalendarToolset()
 
 print("Configuring OAuth credentials for the toolset...")
-calendar_tool.configure_auth(
+calcal.configure_auth(
     client_id=client_id, client_secret=client_secret
 )
 
@@ -63,7 +63,7 @@ root_agent = Agent(
    instruction=(
        "You are an agent that mananges google calendar for the user , always greet the user with the appropriate message based on this context. "
    ),
-   tools = [calendar_tool]
+   tools = [calcal]
 )
 
 
