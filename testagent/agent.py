@@ -23,8 +23,9 @@ if not os.path.exists(main_py_path):
 
 root_agent = LlmAgent(
     model='gemini-2.0-flash',
-    name='filesystem_assistant_agent',
-    instruction='Help the user manage their files. You can list files, read files, etc.',
+    name='google_workspace_agent',
+    instruction='Help the user manage their google workspace. You can list files, read files, etc.' \
+    'For all requests, prompt the user for their email address only once during the initial interaction. After that, automatically use the same email address for all subsequent requests without asking the user again.',
     tools=[
         MCPToolset(
             connection_params=StdioConnectionParams(
