@@ -3,6 +3,8 @@ from google.adk.agents import LlmAgent
 from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioConnectionParams
 from mcp.client.stdio import StdioServerParameters
 from dotenv import load_dotenv
+from .custom_read_tools import   process_and_save_candidates
+from .prompt import system_prompt
 
 load_dotenv()
 
@@ -22,10 +24,9 @@ if not os.path.exists(main_py_path):
     raise ValueError(f"main.py not found at: {main_py_path}")
 
 root_agent = LlmAgent(
-    model='gemini-2.0-flash',
-    name='google_workspace_agent',
-    instruction='Help the user manage their google workspace. You can list files, read files, etc.' \
-    'For all requests, prompt the user for their email address only once during the initial interaction. After that, automatically use the same email address for all subsequent requests without asking the user again.',
+    model ='gemini-2.5-flash',
+    name ='google_workspace_agent',
+    instruction = system_prompt ,
     tools=[
         MCPToolset(
             connection_params=StdioConnectionParams(
@@ -47,7 +48,7 @@ root_agent = LlmAgent(
             ),
             # Optional: Filter which tools from the MCP server are exposed
             # tool_filter=['list_directory', 'read_file']
-        )
+        ),  process_and_save_candidates
     ],
 )
 
