@@ -1,4 +1,5 @@
 import os
+import json
 
 from pymongo import MongoClient
 from dotenv import load_dotenv
@@ -72,6 +73,15 @@ def process_and_save_candidates(raw_data_string: str) -> str:
         gender = candidate_record.get('Gender', '').title() # .title() makes it 'Male' or 'Female'
         if gender not in ['Male', 'Female']:
             continue # Discard this record
+
+        # Rule 3: Check Role
+        role = candidate_record.get('Role')
+        if not role:
+            continue
+
+        # Rule 4: Ensure all fields match the header length
+        if len(candidate_record) != len(header):
+            continue
         
         # If all checks pass, add the validated and structured record to our list
         # Ensure the gender is stored in the standardized format
@@ -104,4 +114,123 @@ def process_and_save_candidates(raw_data_string: str) -> str:
         return f"Database Error: Could not save records. Details: {e}"
 
 
+ROLE_DOCUMENT_REQUIREMENTS = {
+    "Software Engineer": [
+        "Signed NDA",
+        "Proof of identity (passport or driver's license or PAN card)",
+        "Signed offer letter",
+        "Educational certificates (degree/diploma in Computer Science/IT)",
+        "Previous employment certificate",
+        "Salary slip (last 3 months)",
+        "Bank account details",
+        "Technical skills assessment certificate",
+        "Code of conduct acknowledgement",
+        "Programming competency test results",
+        "GitHub/portfolio submission",
+        "System access request form"
+    ],
+    
+    "Human Resources Executive": [
+        "Signed NDA",
+        "Proof of identity (passport or driver's license or PAN card)",
+        "Signed offer letter",
+        "Educational certificates (degree in HR/Psychology/Business Administration)",
+        "Previous employment certificate",
+        "Salary slip (last 3 months)",
+        "Bank account details",
+        "HR practices certification",
+        "Employment law training certificate",
+        "Enhanced confidentiality agreement",
+        "HRIS system access form",
+        "Background verification authorization",
+        "Employee data handling training completion",
+        "Conflict resolution certification"
+    ]
+}
+
+def generate_onboarding_email_prompts() -> str:
+    """
+    Reads every candidate record from MongoDB, then for each:
+      - Pulls First Name, Last Name, Email, Role
+      - Builds a personalized onboarding email title/subject/body
+      - Collects all emails into a JSON list
+
+    Returns JSON-string with:
+      {
+        "status": "success"|"no_records"|"error",
+        "emails": [ { "to","title","subject","body" }, … ],
+        "message": error-or-info-text
+      }
+    """
+    try:
+        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+        client.server_info()
+        coll = client['nextleap']['candidates']
+
+        emails = []
+        for cand in coll.find({}):
+            first = cand.get("First Name", "").strip()
+            last  = cand.get("Last Name", "").strip()
+            to    = cand.get("Email", "").strip()
+            role  = cand.get("Role", "").strip()
+
+            if not (first and last and to and role):
+                continue
+
+            # Build title/subject
+            subject = f"Welcome to NextLeap, {first}! Onboarding for your {role} Role"
+            title   = subject  # add 'title' key
+
+            # Document list
+            docs = ROLE_DOCUMENT_REQUIREMENTS.get(role, [
+                "Signed NDA",
+                "Proof of identity",
+                "Signed offer letter"
+            ])
+            docs_list = "\n".join(f"- {d}" for d in docs)
+
+            body = (
+                f"Hi {first} {last},\n\n"
+                f"Congratulations on joining NextLeap as a {role}!\n\n"
+                "To complete your onboarding, please prepare and upload the following documents:\n"
+                f"{docs_list}\n\n"
+                "If you have any questions, feel free to reach out. We’re excited to have you on board!\n\n"
+                "Best,\n"
+                "The NextLeap HR Team"
+            )
+
+            emails.append({
+                "to": to,
+                "title": title,
+                "subject": subject,
+                "body": body
+            })
+
+            # Update the candidate record status to "Onboarding_Email_Sent" only when the email is successfully generated
+            # This ensures we don't update the status if no emai
+            coll.update_one(
+                {"_id": cand["_id"]},
+                {"$set": {"status": "Onboarding_Email_Sent"}}
+            )
+
+        client.close()
+
+        if not emails:
+            return json.dumps({
+                "status": "no_records",
+                "emails": [],
+                "message": "No complete candidate records found to generate emails."
+            })
+
+        return json.dumps({
+            "status": "success",
+            "emails": emails
+        })
+
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "emails": [],
+            "message": f"Could not generate onboarding emails: {e}"
+        })
 
