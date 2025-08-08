@@ -1,17 +1,19 @@
 import os
 import json
-
+from typing import Dict, Any
 from pymongo import MongoClient
 from dotenv import load_dotenv
 
-
 load_dotenv()
 
-mongo_uri = os.getenv("MONGO_URI")
-       
+# Move this inside functions to avoid module-level state
+def _get_mongo_client():
+    """Helper function to create MongoDB client when needed"""
+    mongo_uri = os.getenv("MONGO_URI")
+    if not mongo_uri:
+        raise ValueError("MONGO_URI environment variable not set")
+    return MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
 
-
-# @tool.register
 def process_and_save_candidates(raw_data_string: str) -> str:
     """
     Parses a raw string of candidate data, manually validates each record, and saves valid ones to MongoDB.
@@ -93,60 +95,30 @@ def process_and_save_candidates(raw_data_string: str) -> str:
     if not validated_candidates_list:
         return "Validation complete. No valid candidate records were found to save."
 
+    # Create MongoDB connection inside the function
+    client = None
     try:
-        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+        client = _get_mongo_client()
         client.server_info()
         db = client['nextleap']
         collection = db['candidates']
         
         # Use the manually built list to create records in the database
-        #add a status field to each record
+        # add a status field to each record
         for candidate in validated_candidates_list:
             candidate['status'] = 'Record_Saved'
         
         collection.insert_many(validated_candidates_list)
-        client.close()
         
         # The final, simple success message
         return "Candidate records were validated and saved in MongoDB."
         
     except Exception as e:
         return f"Database Error: Could not save records. Details: {e}"
+    finally:
+        if client:
+            client.close()
 
-
-ROLE_DOCUMENT_REQUIREMENTS = {
-    "Software Engineer": [
-        "Signed NDA",
-        "Proof of identity (passport or driver's license or PAN card)",
-        "Signed offer letter",
-        "Educational certificates (degree/diploma in Computer Science/IT)",
-        "Previous employment certificate",
-        "Salary slip (last 3 months)",
-        "Bank account details",
-        "Technical skills assessment certificate",
-        "Code of conduct acknowledgement",
-        "Programming competency test results",
-        "GitHub/portfolio submission",
-        "System access request form"
-    ],
-    
-    "Human Resources Executive": [
-        "Signed NDA",
-        "Proof of identity (passport or driver's license or PAN card)",
-        "Signed offer letter",
-        "Educational certificates (degree in HR/Psychology/Business Administration)",
-        "Previous employment certificate",
-        "Salary slip (last 3 months)",
-        "Bank account details",
-        "HR practices certification",
-        "Employment law training certificate",
-        "Enhanced confidentiality agreement",
-        "HRIS system access form",
-        "Background verification authorization",
-        "Employee data handling training completion",
-        "Conflict resolution certification"
-    ]
-}
 
 def generate_onboarding_email_prompts() -> str:
     """
@@ -162,8 +134,44 @@ def generate_onboarding_email_prompts() -> str:
         "message": error-or-info-text
       }
     """
+    # Define role requirements inside the function to avoid module-level state
+    ROLE_DOCUMENT_REQUIREMENTS = {
+        "Software Engineer": [
+            "Signed NDA",
+            "Proof of identity (passport or driver's license or PAN card)",
+            "Signed offer letter",
+            "Educational certificates (degree/diploma in Computer Science/IT)",
+            "Previous employment certificate",
+            "Salary slip (last 3 months)",
+            "Bank account details",
+            "Technical skills assessment certificate",
+            "Code of conduct acknowledgement",
+            "Programming competency test results",
+            "GitHub/portfolio submission",
+            "System access request form"
+        ],
+        
+        "Human Resources Executive": [
+            "Signed NDA",
+            "Proof of identity (passport or driver's license or PAN card)",
+            "Signed offer letter",
+            "Educational certificates (degree in HR/Psychology/Business Administration)",
+            "Previous employment certificate",
+            "Salary slip (last 3 months)",
+            "Bank account details",
+            "HR practices certification",
+            "Employment law training certificate",
+            "Enhanced confidentiality agreement",
+            "HRIS system access form",
+            "Background verification authorization",
+            "Employee data handling training completion",
+            "Conflict resolution certification"
+        ]
+    }
+    
+    client = None
     try:
-        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+        client = _get_mongo_client()
         client.server_info()
         coll = client['nextleap']['candidates']
 
@@ -194,7 +202,7 @@ def generate_onboarding_email_prompts() -> str:
                 f"Congratulations on joining NextLeap as a {role}!\n\n"
                 "To complete your onboarding, please prepare and upload the following documents:\n"
                 f"{docs_list}\n\n"
-                "If you have any questions, feel free to reach out. We’re excited to have you on board!\n\n"
+                "If you have any questions, feel free to reach out. We're excited to have you on board!\n\n"
                 "Best,\n"
                 "The NextLeap HR Team"
             )
@@ -207,13 +215,11 @@ def generate_onboarding_email_prompts() -> str:
             })
 
             # Update the candidate record status to "Onboarding_Email_Sent" only when the email is successfully generated
-            # This ensures we don't update the status if no emai
+            # This ensures we don't update the status if no email
             coll.update_one(
                 {"_id": cand["_id"]},
                 {"$set": {"status": "Onboarding_Email_Sent"}}
             )
-
-        client.close()
 
         if not emails:
             return json.dumps({
@@ -233,4 +239,6 @@ def generate_onboarding_email_prompts() -> str:
             "emails": [],
             "message": f"Could not generate onboarding emails: {e}"
         })
-
+    finally:
+        if client:
+            client.close()
