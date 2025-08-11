@@ -1,7 +1,7 @@
 import os
 from google.adk.agents import LlmAgent
-from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioConnectionParams
-from mcp.client.stdio import StdioServerParameters
+from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioConnectionParams , StreamableHTTPConnectionParams
+from mcp.client.stdio import StdioServerParameters 
 from dotenv import load_dotenv
 from .custom_read_tools import   process_and_save_candidates , generate_onboarding_email_prompts
 from .prompt import system_prompt
@@ -13,6 +13,8 @@ clientsecret = os.getenv("OAUTH_CLIENT_SECRET")
 
 # Define the absolute path to your MCP server directory
 MCP_SERVER_PATH = "/Users/mustafa.mohammed/Documents/google_workspace_mcp"
+
+MCP_SERVER_URL="https://workspace-mcp-13982625832.us-central1.run.app"
 
 # Verify the path exists
 if not os.path.exists(MCP_SERVER_PATH):
@@ -28,27 +30,11 @@ root_agent = LlmAgent(
     name ='google_workspace_agent',
     instruction = system_prompt ,
     tools=[
-        MCPToolset(
-            connection_params=StdioConnectionParams(
-                server_params=StdioServerParameters(
-                    command='uv',
-                    args=[
-                        "run",  # This tells uv to run the script
-                        "python",  # Specify python interpreter
-                        "main.py"  # Your MCP server script
-                    ],
-                    # Set the working directory to your MCP server location
-                    cwd=MCP_SERVER_PATH,
-                    env={
-                        "GOOGLE_OAUTH_CLIENT_ID": clientid,
-                        "GOOGLE_OAUTH_CLIENT_SECRET": clientsecret,
-                        "OAUTHLIB_INSECURE_TRANSPORT": "1"
-                    }
-                ),
+         MCPToolset(
+            connection_params=StreamableHTTPConnectionParams(
+                url=MCP_SERVER_URL
             ),
-            # Optional: Filter which tools from the MCP server are exposed
-            # tool_filter=['list_directory', 'read_file']
-        ),  process_and_save_candidates, generate_onboarding_email_prompts
+        ), process_and_save_candidates, generate_onboarding_email_prompts
     ],
 )
 
