@@ -3,7 +3,7 @@ from google.adk.agents import LlmAgent
 from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioConnectionParams
 from mcp.client.stdio import StdioServerParameters
 from dotenv import load_dotenv
-from .custom_read_tools import   process_and_save_candidates , generate_onboarding_email_prompts
+from .custom_read_tools import   process_and_save_candidates , generate_onboarding_email
 from .prompt import system_prompt
 
 load_dotenv()
@@ -48,7 +48,7 @@ root_agent = LlmAgent(
             ),
             # Optional: Filter which tools from the MCP server are exposed
             # tool_filter=['list_directory', 'read_file']
-        ),  process_and_save_candidates, generate_onboarding_email_prompts
+        ),  process_and_save_candidates, generate_onboarding_email
     ],
 )
 

@@ -123,7 +123,7 @@ def process_and_save_candidates(raw_data_string: str) -> str:
             client.close()
 
 
-def generate_onboarding_email_prompts() -> str:
+def generate_onboarding_email() -> str:
     """
     Reads every candidate record from MongoDB, then for each:
       - Pulls First Name, Last Name, Email, Role
@@ -189,6 +189,10 @@ def generate_onboarding_email_prompts() -> str:
                 continue
 
             # Build title/subject
+            # send emails only if status is Record_saved
+            if cand.get("status") != "Record_Saved":
+                continue
+
             subject = f"Welcome to NextLeap, {first}! Onboarding for your {role} Role"
             title   = subject  # add 'title' key
 
