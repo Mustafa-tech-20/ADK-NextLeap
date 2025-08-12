@@ -3,6 +3,8 @@ import json
 from typing import Dict, Any
 from pymongo import MongoClient
 from dotenv import load_dotenv
+from datetime import datetime, timezone
+
 
 load_dotenv()
 
@@ -107,6 +109,7 @@ def process_and_save_candidates(raw_data_string: str) -> str:
         # add a status field to each record
         for candidate in validated_candidates_list:
             candidate['status'] = 'Record_Saved'
+            candidate['created_at'] = datetime.now(timezone.utc)
         
         collection.insert_many(validated_candidates_list)
         
