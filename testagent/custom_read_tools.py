@@ -1,5 +1,6 @@
 import os
 import json
+import re
 from typing import Dict, Any
 from pymongo import MongoClient
 from dotenv import load_dotenv
@@ -27,6 +28,7 @@ def process_and_save_candidates(raw_data_string: str) -> str:
     - Rule 2: The 'Gender' must be either 'Male' or 'Female' (case-insensitive).
     - Rule 3: A 'Role' field for each candidate must be present regarding what role they are applying for.
     - Rule 4: Each candidate record must have the same number of fields as the header row.
+    - Rule 5: The 'Email' field must be a valid email address and not already exist in the database.
 
     Records that fail validation are discarded.
 
@@ -86,6 +88,10 @@ def process_and_save_candidates(raw_data_string: str) -> str:
         # Rule 4: Ensure all fields match the header length
         if len(candidate_record) != len(header):
             continue
+
+        EMAIL_REGEX = re.compile(r"^[\w\.-]+@[\w\.-]+\.\w+$")
+        if not EMAIL_REGEX.match(email):
+            continue
         
         # If all checks pass, add the validated and structured record to our list
         # Ensure the gender is stored in the standardized format
@@ -104,6 +110,7 @@ def process_and_save_candidates(raw_data_string: str) -> str:
         client.server_info()
         db = client['nextleap']
         collection = db['candidates']
+
         
         # Use the manually built list to create records in the database
         # add a status field to each record
@@ -111,7 +118,21 @@ def process_and_save_candidates(raw_data_string: str) -> str:
             candidate['status'] = 'Record_Saved'
             candidate['created_at'] = datetime.now(timezone.utc)
         
-        collection.insert_many(validated_candidates_list)
+        existing_emails = set(
+            doc["Email"].lower()
+            for doc in collection.find({}, {"Email": 1, "_id": 0})
+        )
+
+        # Filter out duplicates before insert
+        validated_candidates_list_final = [
+            c for c in validated_candidates_list
+            if c['Email'].lower() not in existing_emails
+        ]
+        
+        if not validated_candidates_list_final:
+            return "Validation complete. No new valid candidate records to save."
+        
+        collection.insert_many(validated_candidates_list_final)
         
         # The final, simple success message
         return "Candidate records were validated and saved in MongoDB."
